@@ -1,10 +1,10 @@
-"use client"
+'use client';
 
-import { useEffect, useRef, useState, useCallback } from "react"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { Progress } from "@/components/ui/progress"
+import React, { useEffect, useRef, useState, useCallback } from "react";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Progress } from "@/components/ui/progress";
 import {
   Home,
   RotateCcw,
@@ -18,41 +18,41 @@ import {
   Pause,
   Play,
   Bug,
-} from "lucide-react"
-import Link from "next/link"
-import { MazeEngine, type MazeConfig } from "@/lib/maze-engine"
-import { SoundManager } from "@/lib/sound-manager"
-import { GameOverModal } from "@/components/game-over-modal"
-import { SafetyTipModal } from "@/components/safety-tip-modal"
-import { MobileGameControls } from "@/components/mobile-game-controls"
-import { GameInstructions } from "@/components/game-instructions"
-import { DebugOverlay } from "@/components/debug-overlay"
-import { FinalScoreModal } from "@/components/final-score-modal"
-import { ToastNotification } from "@/components/toast-notification"
+} from "lucide-react";
+import Link from "next/link";
+import { MazeEngine, type MazeConfig } from "@/lib/maze-engine";
+import { SoundManager } from "@/lib/sound-manager";
+import { GameOverModal } from "@/components/game-over-modal";
+import { SafetyTipModal } from "@/components/safety-tip-modal";
+import { MobileGameControls } from "@/components/mobile-game-controls";
+import { GameInstructions } from "@/components/game-instructions";
+import { DebugOverlay } from "@/components/debug-overlay";
+import { FinalScoreModal } from "@/components/final-score-modal";
+import { ToastNotification } from "@/components/toast-notification";
 
 interface GameState {
-  maze: string[][]
-  playerPos: { x: number; y: number }
-  exitPos: { x: number; y: number }
-  collectibles: Array<{ x: number; y: number; type: string; collected: boolean; powerUp?: boolean }>
-  obstacles: Array<{ x: number; y: number; type: string }>
-  score: number
-  time: number
-  health: number
-  gameStatus: "playing" | "won" | "lost" | "paused"
-  collectedItems: number
-  combo: number
-  lastMoveTime: number
-  powerUpActive: boolean
-  powerUpTimeLeft: number
-  debugInfo?: any
-  mistakes: number
-  gameStartTime: number
-  inputDisabled: boolean
+  maze: string[][];
+  playerPos: { x: number; y: number };
+  exitPos: { x: number; y: number };
+  collectibles: Array<{ x: number; y: number; type: string; collected: boolean; powerUp?: boolean }>;
+  obstacles: Array<{ x: number; y: number; type: string }>;
+  score: number;
+  time: number;
+  health: number;
+  gameStatus: "playing" | "won" | "lost" | "paused";
+  collectedItems: number;
+  combo: number;
+  lastMoveTime: number;
+  powerUpActive: boolean;
+  powerUpTimeLeft: number;
+  debugInfo?: any;
+  mistakes: number;
+  gameStartTime: number;
+  inputDisabled: boolean;
 }
 
-const GRID_SIZE = 12
-const CELL_SIZE = 40
+const GRID_SIZE = 12;
+const CELL_SIZE = 40;
 
 const config = {
   hazardPenalty: { health: 15, time: 5 },
@@ -65,73 +65,96 @@ const config = {
   toastDuration: 3000,
   autoSaveScoreIfClosed: true,
   hazardTypes: new Set(["fire", "broken", "lava", "danger"]),
-}
+};
 
 export default function GamePage() {
-  const canvasRef = useRef<HTMLCanvasElement>(null)
-  const gameLoopRef = useRef<number>()
-  const timerRef = useRef<number>()
-  const ariaLivePoliteRef = useRef<HTMLDivElement>(null)
-  const ariaLiveAssertiveRef = useRef<HTMLDivElement>(null)
+  // refs
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const gameLoopRef = useRef<number | undefined>(undefined);
+  const timerRef = useRef<number | undefined>(undefined);
+  const ariaLivePoliteRef = useRef<HTMLDivElement | null>(null);
+  const ariaLiveAssertiveRef = useRef<HTMLDivElement | null>(null);
 
-  const [gameState, setGameState] = useState<GameState | null>(null)
-  const [soundEnabled, setSoundEnabled] = useState(true)
-  const [showGameOver, setShowGameOver] = useState(false)
-  const [showSafetyTip, setShowSafetyTip] = useState<string | null>(null)
-  const [showInstructions, setShowInstructions] = useState(false)
-  const [debugMode, setDebugMode] = useState(false)
-  const [toastMessage, setToastMessage] = useState<string | null>(null)
-  const [showFinalScore, setShowFinalScore] = useState(false)
-  const [finalScoreData, setFinalScoreData] = useState<any>(null)
+  // engines/managers as refs (created on mount)
+  const mazeEngineRef = useRef<MazeEngine | null>(null);
+  const soundManagerRef = useRef<SoundManager | null>(null);
 
-  const [mazeEngine] = useState(() => {
-    const urlParams = new URLSearchParams(window.location.search)
-    const isDebugMode = urlParams.get("debug") === "true"
+  // state
+  const [gameState, setGameState] = useState<GameState | null>(null);
+  const [soundEnabled, setSoundEnabled] = useState(true);
+  const [showGameOver, setShowGameOver] = useState(false);
+  const [showSafetyTip, setShowSafetyTip] = useState<string | null>(null);
+  const [showInstructions, setShowInstructions] = useState(false);
+  const [debugMode, setDebugMode] = useState(false);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [showFinalScore, setShowFinalScore] = useState(false);
+  const [finalScoreData, setFinalScoreData] = useState<any>(null);
 
-    const config: Partial<MazeConfig> = {
-      debugMode: isDebugMode,
-      allowDiagonal: false,
-      obstacleCost: 10,
-      maxRepairIterations: 50,
-      mutateGridByDefault: true,
+  // initialize maze engine and sound manager on mount
+  useEffect(() => {
+    // determine debug mode from URL
+    try {
+      const urlParams = new URLSearchParams(window.location.search);
+      const isDebugMode = urlParams.get("debug") === "true";
+      setDebugMode(isDebugMode);
+
+      // create MazeEngine
+      const mazeConfig: Partial<MazeConfig> = {
+        debugMode: isDebugMode,
+        allowDiagonal: false,
+        obstacleCost: 10,
+        maxRepairIterations: 50,
+        mutateGridByDefault: true,
+      };
+      mazeEngineRef.current = new MazeEngine(GRID_SIZE, mazeConfig);
+
+      // create sound manager
+      soundManagerRef.current = new SoundManager();
+      soundManagerRef.current.setEnabled(soundEnabled);
+    } catch {
+      // fallback safe initialization
+      mazeEngineRef.current = new MazeEngine(GRID_SIZE, { debugMode: false });
+      soundManagerRef.current = new SoundManager();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // run once
 
-    setDebugMode(isDebugMode)
-    return new MazeEngine(GRID_SIZE, config)
-  })
-
-  const [soundManager] = useState(() => new SoundManager())
+  // sync sound manager when soundEnabled changes
+  useEffect(() => {
+    if (soundManagerRef.current) soundManagerRef.current.setEnabled(soundEnabled);
+  }, [soundEnabled]);
 
   const announceForAccessibility = useCallback((text: string, assertive = false) => {
-    const targetRef = assertive ? ariaLiveAssertiveRef : ariaLivePoliteRef
+    const targetRef = assertive ? ariaLiveAssertiveRef : ariaLivePoliteRef;
     if (targetRef.current) {
-      targetRef.current.textContent = text
+      targetRef.current.textContent = text;
       setTimeout(() => {
-        if (targetRef.current) targetRef.current.textContent = ""
-      }, 1000)
+        if (targetRef.current) targetRef.current.textContent = "";
+      }, 1000);
     }
-  }, [])
+  }, []);
 
+  // Hazard collision handler
   const handleHazardCollision = useCallback(
     (playerPos: { x: number; y: number }, tile: any) => {
-      if (!gameState) return false
+      if (!gameState) return false;
 
-      const hazardType = tile.type || "fire"
+      const hazardType = tile.type || "fire";
 
       if (config.lethalHazards.has(hazardType)) {
-        setGameState((prev) => (prev ? { ...prev, health: 0, gameStatus: "lost" } : prev))
-        announceForAccessibility(`Game Over! You stepped on lethal ${hazardType}`, true)
-        return true
+        setGameState((prev) => (prev ? { ...prev, health: 0, gameStatus: "lost" } : prev));
+        announceForAccessibility(`Game Over! You stepped on lethal ${hazardType}`, true);
+        return true;
       }
 
-      const healthPenalty = config.hazardPenalty.health
-      const timePenalty = config.hazardPenalty.time
+      const healthPenalty = config.hazardPenalty.health;
+      const timePenalty = config.hazardPenalty.time;
 
       setGameState((prev) => {
-        if (!prev) return prev
-        const newHealth = Math.max(0, prev.health - healthPenalty)
-        const newTime = prev.time + timePenalty
-        const newMistakes = prev.mistakes + 1
+        if (!prev) return prev;
+        const newHealth = Math.max(0, prev.health - healthPenalty);
+        const newTime = prev.time + timePenalty;
+        const newMistakes = prev.mistakes + 1;
 
         return {
           ...prev,
@@ -139,58 +162,54 @@ export default function GamePage() {
           time: newTime,
           mistakes: newMistakes,
           gameStatus: newHealth <= 0 ? "lost" : prev.gameStatus,
-        }
-      })
+        };
+      });
 
-      const warningMessage = `Warning: You stepped on ${hazardType.toUpperCase()} — Health -${healthPenalty} / Time -${timePenalty}s`
-      setToastMessage(warningMessage)
-      announceForAccessibility(warningMessage)
+      const warningMessage = `Warning: You stepped on ${hazardType.toUpperCase()} — Health -${healthPenalty} / Time -${timePenalty}s`;
+      setToastMessage(warningMessage);
+      announceForAccessibility(warningMessage);
 
-      setTimeout(() => setToastMessage(null), config.toastDuration)
+      setTimeout(() => setToastMessage(null), config.toastDuration);
 
       if ("vibrate" in navigator) {
-        navigator.vibrate(200)
+        try {
+          navigator.vibrate?.(200);
+        } catch {}
       }
 
-      soundManager.playObstacleHit()
-      return false
+      soundManagerRef.current?.playObstacleHit();
+      return false;
     },
-    [gameState, announceForAccessibility, soundManager],
-  )
+    [gameState, announceForAccessibility]
+  );
 
   const computeFinalScore = useCallback(
-    (result: {
-      timeRemaining: number
-      itemsCollected: number
-      health: number
-      mistakes: number
-    }) => {
-      const base = Math.max(0, Math.round(result.timeRemaining * config.timeValue))
-      const itemBonus = result.itemsCollected * config.itemValue
-      const healthBonus = Math.round((result.health / 100) * config.healthValue)
-      const mistakePenalty = result.mistakes * config.mistakePenalty
-      return Math.max(0, base + itemBonus + healthBonus - mistakePenalty)
+    (result: { timeRemaining: number; itemsCollected: number; health: number; mistakes: number }) => {
+      const base = Math.max(0, Math.round(result.timeRemaining * config.timeValue));
+      const itemBonus = result.itemsCollected * config.itemValue;
+      const healthBonus = Math.round((result.health / 100) * config.healthValue);
+      const mistakePenalty = result.mistakes * config.mistakePenalty;
+      return Math.max(0, base + itemBonus + healthBonus - mistakePenalty);
     },
-    [],
-  )
+    []
+  );
 
-  // 🔹 Updated handleExitReached: immediately exits to landing page
   const handleExitReached = useCallback(
     (playerPos: { x: number; y: number }, exitPos: { x: number; y: number }) => {
-      if (!gameState) return
+      if (!gameState) return;
 
       // Stop input & timers
-      setGameState((prev) => (prev ? { ...prev, inputDisabled: true, gameStatus: "won" } : prev))
-      if (timerRef.current) clearInterval(timerRef.current)
+      setGameState((prev) => (prev ? { ...prev, inputDisabled: true, gameStatus: "won" } : prev));
+      if (timerRef.current) clearInterval(timerRef.current);
 
       // Compute & save final score
-      const timeRemaining = Math.max(0, 300 - gameState.time)
+      const timeRemaining = Math.max(0, 300 - gameState.time);
       const finalScore = computeFinalScore({
         timeRemaining,
         itemsCollected: gameState.collectedItems,
         health: gameState.health,
         mistakes: gameState.mistakes,
-      })
+      });
 
       const scoreData = {
         finalScore,
@@ -199,64 +218,33 @@ export default function GamePage() {
         health: gameState.health,
         mistakes: gameState.mistakes,
         totalTime: gameState.time,
-      }
+      };
 
       try {
-        localStorage.setItem("lastFinalScore", JSON.stringify(scoreData))
+        localStorage.setItem("lastFinalScore", JSON.stringify(scoreData));
       } catch {}
 
       // Feedback
-      announceForAccessibility(`Congratulations! You escaped! Final score: ${finalScore}`, true)
-      soundManager.playCollect()
+      announceForAccessibility(`Congratulations! You escaped! Final score: ${finalScore}`, true);
+      soundManagerRef.current?.playCollect();
 
-      // Redirect to landing page
-      window.location.href = "/"
+      // Save final to state & show modal
+      setFinalScoreData(scoreData);
+      setShowFinalScore(true);
+
+      // Optionally redirect to landing after a short delay (commented out)
+      // setTimeout(() => (window.location.href = "/"), 1500);
     },
-    [gameState, computeFinalScore, announceForAccessibility, soundManager],
-  )
-
-  // 🔹 ... the rest of your file remains unchanged below ...
-
-
-  useEffect(() => {
-    const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === "leaderboard_last_update") {
-        window.dispatchEvent(new CustomEvent("leaderboard:updated"))
-      }
-    }
-
-    const handleLeaderboardUpdate = () => {
-      console.log("[v0] Leaderboard updated")
-    }
-
-    window.addEventListener("storage", handleStorageChange)
-    window.addEventListener("leaderboard:updated", handleLeaderboardUpdate)
-
-    return () => {
-      window.removeEventListener("storage", handleStorageChange)
-      window.removeEventListener("leaderboard:updated", handleLeaderboardUpdate)
-    }
-  }, [])
-
-  useEffect(() => {
-    const handleMazeRepaired = (event: CustomEvent) => {
-      setToastMessage(event.detail.message)
-      setTimeout(() => setToastMessage(null), 4000)
-    }
-
-    window.addEventListener("maze-repaired", handleMazeRepaired as EventListener)
-    return () => {
-      window.removeEventListener("maze-repaired", handleMazeRepaired as EventListener)
-    }
-  }, [])
-
-  useEffect(() => {
-    soundManager.setEnabled(soundEnabled)
-  }, [soundEnabled, soundManager])
+    [gameState, computeFinalScore, announceForAccessibility]
+  );
 
   const initializeGame = useCallback(() => {
-    const result = mazeEngine.generateMaze()
-    const { maze, playerPos, exitPos, collectibles, obstacles, debugInfo } = result
+    if (!mazeEngineRef.current) {
+      mazeEngineRef.current = new MazeEngine(GRID_SIZE, { debugMode, allowDiagonal: false });
+    }
+
+    const result = mazeEngineRef.current.generateMaze();
+    const { maze, playerPos, exitPos, collectibles, obstacles, debugInfo } = result;
 
     setGameState({
       maze,
@@ -277,115 +265,116 @@ export default function GamePage() {
       mistakes: 0,
       gameStartTime: Date.now(),
       inputDisabled: false,
-    })
-    setShowGameOver(false)
-    setShowSafetyTip(null)
-    setShowFinalScore(false)
-    setFinalScoreData(null)
+    });
 
-    if (timerRef.current) clearInterval(timerRef.current)
+    setShowGameOver(false);
+    setShowSafetyTip(null);
+    setShowFinalScore(false);
+    setFinalScoreData(null);
+
+    if (timerRef.current) clearInterval(timerRef.current);
     timerRef.current = window.setInterval(() => {
       setGameState((prev) => {
-        if (!prev || prev.gameStatus !== "playing") return prev
-        return { ...prev, time: prev.time + 1 }
-      })
-    }, 1000)
-  }, [mazeEngine])
+        if (!prev || prev.gameStatus !== "playing") return prev;
+        return { ...prev, time: prev.time + 1 };
+      });
+    }, 1000);
+  }, [debugMode]);
 
   const toggleDebugMode = useCallback(() => {
-    setDebugMode((prev) => !prev)
-    mazeEngine.config.debugMode = !debugMode
-  }, [debugMode, mazeEngine])
+    setDebugMode((prev) => !prev);
+    if (mazeEngineRef.current) mazeEngineRef.current.config.debugMode = !debugMode;
+  }, [debugMode]);
 
   const togglePause = useCallback(() => {
     setGameState((prev) => {
-      if (!prev) return prev
+      if (!prev) return prev;
       return {
         ...prev,
         gameStatus: prev.gameStatus === "paused" ? "playing" : "paused",
-      }
-    })
-  }, [])
+      };
+    });
+  }, []);
 
   const movePlayer = useCallback(
     (direction: "up" | "down" | "left" | "right") => {
-      if (!gameState || gameState.gameStatus !== "playing" || gameState.inputDisabled) return
+      if (!gameState || gameState.gameStatus !== "playing" || gameState.inputDisabled) return;
 
       setGameState((prev) => {
-        if (!prev) return prev
+        if (!prev) return prev;
 
-        const { x, y } = prev.playerPos
-        let newX = x
-        let newY = y
+        const { x, y } = prev.playerPos;
+        let newX = x;
+        let newY = y;
 
         switch (direction) {
           case "up":
-            newY = Math.max(0, y - 1)
-            break
+            newY = Math.max(0, y - 1);
+            break;
           case "down":
-            newY = Math.min(GRID_SIZE - 1, y + 1)
-            break
+            newY = Math.min(GRID_SIZE - 1, y + 1);
+            break;
           case "left":
-            newX = Math.max(0, x - 1)
-            break
+            newX = Math.max(0, x - 1);
+            break;
           case "right":
-            newX = Math.min(GRID_SIZE - 1, x + 1)
-            break
+            newX = Math.min(GRID_SIZE - 1, x + 1);
+            break;
         }
 
         if (prev.maze[newY][newX] === "#") {
-          return prev
+          return prev;
         }
 
         if (newX === prev.exitPos.x && newY === prev.exitPos.y) {
-          setTimeout(() => handleExitReached({ x: newX, y: newY }, prev.exitPos), 100)
-          return { ...prev, playerPos: { x: newX, y: newY } }
+          setTimeout(() => handleExitReached({ x: newX, y: newY }, prev.exitPos), 100);
+          return { ...prev, playerPos: { x: newX, y: newY } };
         }
 
-        soundManager.playMove()
+        soundManagerRef.current?.playMove();
 
-        const hitObstacle = prev.obstacles.find((obs) => obs.x === newX && obs.y === newY)
-        let newHealth = prev.health
-        let newScore = prev.score
-        let newCombo = prev.combo
+        const hitObstacle = prev.obstacles.find((obs) => obs.x === newX && obs.y === newY);
+        let newHealth = prev.health;
+        let newScore = prev.score;
+        let newCombo = prev.combo;
 
         if (hitObstacle && !prev.powerUpActive) {
-          const isHazard = config.hazardTypes.has(hitObstacle.type)
+          const isHazard = config.hazardTypes.has(hitObstacle.type);
           if (isHazard) {
-            const shouldBlock = handleHazardCollision({ x: newX, y: newY }, hitObstacle)
-            if (shouldBlock) return prev
+            const shouldBlock = handleHazardCollision({ x: newX, y: newY }, hitObstacle);
+            if (shouldBlock) return prev;
           } else {
-            newHealth = Math.max(0, prev.health - 10)
-            newScore = Math.max(0, prev.score - 50)
-            newCombo = 0
-            soundManager.playObstacleHit()
+            newHealth = Math.max(0, prev.health - 10);
+            newScore = Math.max(0, prev.score - 50);
+            newCombo = 0;
+            soundManagerRef.current?.playObstacleHit();
           }
         } else if (hitObstacle && prev.powerUpActive) {
-          newScore += 25
+          newScore += 25;
         }
 
         const updatedCollectibles = prev.collectibles.map((item) => {
           if (item.x === newX && item.y === newY && !item.collected) {
-            newScore += 100 + newCombo * 10
-            newCombo += 1
-            soundManager.playCollect()
-            setTimeout(() => setShowSafetyTip(item.type), 100)
+            newScore += 100 + newCombo * 10;
+            newCombo += 1;
+            soundManagerRef.current?.playCollect();
+            setTimeout(() => setShowSafetyTip(item.type), 100);
             if (newCombo >= 3) {
-              return { ...item, collected: true, powerUp: true }
+              return { ...item, collected: true, powerUp: true };
             }
-            return { ...item, collected: true }
+            return { ...item, collected: true };
           }
-          return item
-        })
+          return item;
+        });
 
-        const collectedCount = updatedCollectibles.filter((item) => item.collected).length
+        const collectedCount = updatedCollectibles.filter((item) => item.collected).length;
 
-        let newPowerUpActive = prev.powerUpActive
-        let newPowerUpTimeLeft = prev.powerUpTimeLeft
+        let newPowerUpActive = prev.powerUpActive;
+        let newPowerUpTimeLeft = prev.powerUpTimeLeft;
 
         if (newCombo >= 3 && !prev.powerUpActive) {
-          newPowerUpActive = true
-          newPowerUpTimeLeft = 10
+          newPowerUpActive = true;
+          newPowerUpTimeLeft = 10;
         }
 
         return {
@@ -399,250 +388,250 @@ export default function GamePage() {
           lastMoveTime: Date.now(),
           powerUpActive: newPowerUpActive,
           powerUpTimeLeft: newPowerUpTimeLeft,
-        }
-      })
+        };
+      });
     },
-    [gameState, soundManager, handleHazardCollision, handleExitReached],
-  )
+    [gameState, handleHazardCollision, handleExitReached]
+  );
 
+  // keyboard controls
   useEffect(() => {
     const handleKeyPress = (e: KeyboardEvent) => {
-      if (gameState?.inputDisabled) return
+      if (gameState?.inputDisabled) return;
 
       if (e.key === " " || e.key === "Escape") {
-        e.preventDefault()
-        togglePause()
-        return
+        e.preventDefault();
+        togglePause();
+        return;
       }
 
       if (e.key.toLowerCase() === "d" && e.ctrlKey) {
-        e.preventDefault()
-        toggleDebugMode()
-        return
+        e.preventDefault();
+        toggleDebugMode();
+        return;
       }
 
-      if (gameState?.gameStatus !== "playing") return
+      if (gameState?.gameStatus !== "playing") return;
 
       switch (e.key.toLowerCase()) {
         case "arrowup":
         case "w":
-          e.preventDefault()
-          movePlayer("up")
-          break
+          e.preventDefault();
+          movePlayer("up");
+          break;
         case "arrowdown":
         case "s":
-          e.preventDefault()
-          movePlayer("down")
-          break
+          e.preventDefault();
+          movePlayer("down");
+          break;
         case "arrowleft":
         case "a":
-          e.preventDefault()
-          movePlayer("left")
-          break
+          e.preventDefault();
+          movePlayer("left");
+          break;
         case "arrowright":
         case "d":
-          e.preventDefault()
-          movePlayer("right")
-          break
+          e.preventDefault();
+          movePlayer("right");
+          break;
       }
-    }
+    };
 
-    window.addEventListener("keydown", handleKeyPress)
-    return () => window.removeEventListener("keydown", handleKeyPress)
-  }, [movePlayer, togglePause, toggleDebugMode, gameState])
+    window.addEventListener("keydown", handleKeyPress);
+    return () => window.removeEventListener("keydown", handleKeyPress);
+  }, [movePlayer, togglePause, toggleDebugMode, gameState]);
 
+  // storage/leaderboard & custom events
   useEffect(() => {
-    if (!canvasRef.current) return
-
-    const canvas = canvasRef.current
-    let touchStartX = 0
-    let touchStartY = 0
-
-    const handleTouchStart = (e: TouchEvent) => {
-      e.preventDefault()
-      const touch = e.touches[0]
-      touchStartX = touch.clientX
-      touchStartY = touch.clientY
-    }
-
-    const handleTouchEnd = (e: TouchEvent) => {
-      e.preventDefault()
-      if (!gameState || gameState.gameStatus !== "playing" || gameState.inputDisabled) return
-
-      const touch = e.changedTouches[0]
-      const deltaX = touch.clientX - touchStartX
-      const deltaY = touch.clientY - touchStartY
-      const minSwipeDistance = 30
-
-      if (Math.abs(deltaX) > Math.abs(deltaY)) {
-        if (Math.abs(deltaX) > minSwipeDistance) {
-          movePlayer(deltaX > 0 ? "right" : "left")
-        }
-      } else {
-        if (Math.abs(deltaY) > minSwipeDistance) {
-          movePlayer(deltaY > 0 ? "down" : "up")
-        }
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === "leaderboard_last_update") {
+        window.dispatchEvent(new CustomEvent("leaderboard:updated"));
       }
-    }
+    };
 
-    canvas.addEventListener("touchstart", handleTouchStart, { passive: false })
-    canvas.addEventListener("touchend", handleTouchEnd, { passive: false })
+    const handleLeaderboardUpdate = () => {
+      // placeholder; add behavior if needed
+      console.log("[v0] Leaderboard updated");
+    };
+
+    window.addEventListener("storage", handleStorageChange);
+    window.addEventListener("leaderboard:updated", handleLeaderboardUpdate);
 
     return () => {
-      canvas.removeEventListener("touchstart", handleTouchStart)
-      canvas.removeEventListener("touchend", handleTouchEnd)
-    }
-  }, [movePlayer, gameState])
+      window.removeEventListener("storage", handleStorageChange);
+      window.removeEventListener("leaderboard:updated", handleLeaderboardUpdate);
+    };
+  }, []);
 
   useEffect(() => {
-    if (!gameState || !canvasRef.current) return
+    const handleMazeRepaired = (event: Event) => {
+      // event assumed to be CustomEvent with detail.message
+      const detail = (event as CustomEvent).detail;
+      const message = detail?.message ?? "Maze repaired";
+      setToastMessage(message);
+      setTimeout(() => setToastMessage(null), 4000);
+    };
 
-    const canvas = canvasRef.current
-    const ctx = canvas.getContext("2d")
-    if (!ctx) return
+    window.addEventListener("maze-repaired", handleMazeRepaired as EventListener);
+    return () => {
+      window.removeEventListener("maze-repaired", handleMazeRepaired as EventListener);
+    };
+  }, []);
 
-    ctx.clearRect(0, 0, canvas.width, canvas.height)
+  // canvas drawing
+  useEffect(() => {
+    if (!gameState || !canvasRef.current) return;
 
-    const scale = Math.min(1, (canvas.parentElement?.clientWidth || 480) / (GRID_SIZE * CELL_SIZE))
-    ctx.save()
-    ctx.scale(scale, scale)
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    const scale = Math.min(1, (canvas.parentElement?.clientWidth || 480) / (GRID_SIZE * CELL_SIZE));
+    ctx.save();
+    ctx.scale(scale, scale);
 
     for (let y = 0; y < GRID_SIZE; y++) {
       for (let x = 0; x < GRID_SIZE; x++) {
-        const cell = gameState.maze[y][x]
-        const posX = x * CELL_SIZE
-        const posY = y * CELL_SIZE
+        const cell = gameState.maze[y][x];
+        const posX = x * CELL_SIZE;
+        const posY = y * CELL_SIZE;
 
         if (cell === "#") {
-          ctx.fillStyle = "#374151"
-          ctx.fillRect(posX, posY, CELL_SIZE, CELL_SIZE)
-          ctx.strokeStyle = "#4B5563"
-          ctx.strokeRect(posX, posY, CELL_SIZE, CELL_SIZE)
+          ctx.fillStyle = "#374151";
+          ctx.fillRect(posX, posY, CELL_SIZE, CELL_SIZE);
+          ctx.strokeStyle = "#4B5563";
+          ctx.strokeRect(posX, posY, CELL_SIZE, CELL_SIZE);
         } else {
-          ctx.fillStyle = "#1F2937"
-          ctx.fillRect(posX, posY, CELL_SIZE, CELL_SIZE)
-          ctx.strokeStyle = "#374151"
-          ctx.strokeRect(posX, posY, CELL_SIZE, CELL_SIZE)
+          ctx.fillStyle = "#1F2937";
+          ctx.fillRect(posX, posY, CELL_SIZE, CELL_SIZE);
+          ctx.strokeStyle = "#374151";
+          ctx.strokeRect(posX, posY, CELL_SIZE, CELL_SIZE);
         }
       }
     }
 
-    const exitX = gameState.exitPos.x * CELL_SIZE
-    const exitY = gameState.exitPos.y * CELL_SIZE
-    ctx.fillStyle = "#10B981"
-    ctx.fillRect(exitX + 5, exitY + 5, CELL_SIZE - 10, CELL_SIZE - 10)
-    ctx.fillStyle = "#FFFFFF"
-    ctx.font = "20px Arial"
-    ctx.textAlign = "center"
-    ctx.fillText("🚨", exitX + CELL_SIZE / 2, exitY + CELL_SIZE / 2 + 7)
+    const exitX = gameState.exitPos.x * CELL_SIZE;
+    const exitY = gameState.exitPos.y * CELL_SIZE;
+    ctx.fillStyle = "#10B981";
+    ctx.fillRect(exitX + 5, exitY + 5, CELL_SIZE - 10, CELL_SIZE - 10);
+    ctx.fillStyle = "#FFFFFF";
+    ctx.font = "20px Arial";
+    ctx.textAlign = "center";
+    ctx.fillText("🚨", exitX + CELL_SIZE / 2, exitY + CELL_SIZE / 2 + 7);
 
     gameState.obstacles.forEach((obstacle) => {
-      const obsX = obstacle.x * CELL_SIZE
-      const obsY = obstacle.y * CELL_SIZE
-      ctx.globalAlpha = gameState.powerUpActive ? 0.5 : 1.0
-      ctx.fillStyle = "#DC2626"
-      ctx.fillRect(obsX + 8, obsY + 8, CELL_SIZE - 16, CELL_SIZE - 16)
-      ctx.fillStyle = "#FFFFFF"
-      ctx.font = "16px Arial"
-      ctx.textAlign = "center"
+      const obsX = obstacle.x * CELL_SIZE;
+      const obsY = obstacle.y * CELL_SIZE;
+      ctx.globalAlpha = gameState.powerUpActive ? 0.5 : 1.0;
+      ctx.fillStyle = "#DC2626";
+      ctx.fillRect(obsX + 8, obsY + 8, CELL_SIZE - 16, CELL_SIZE - 16);
+      ctx.fillStyle = "#FFFFFF";
+      ctx.font = "16px Arial";
+      ctx.textAlign = "center";
 
-      let emoji = "🔥"
-      if (obstacle.type === "stairs") emoji = "🚧"
-      if (obstacle.type === "door") emoji = "🚪"
+      let emoji = "🔥";
+      if (obstacle.type === "stairs") emoji = "🚧";
+      if (obstacle.type === "door") emoji = "🚪";
 
-      ctx.fillText(emoji, obsX + CELL_SIZE / 2, obsY + CELL_SIZE / 2 + 5)
-      ctx.globalAlpha = 1.0
-    })
+      ctx.fillText(emoji, obsX + CELL_SIZE / 2, obsY + CELL_SIZE / 2 + 5);
+      ctx.globalAlpha = 1.0;
+    });
 
     gameState.collectibles.forEach((item) => {
       if (!item.collected) {
-        const itemX = item.x * CELL_SIZE
-        const itemY = item.y * CELL_SIZE
-        const pulse = Math.sin(Date.now() * 0.005) * 0.1 + 0.9
-        ctx.globalAlpha = pulse
-        ctx.fillStyle = "#F59E0B"
-        ctx.fillRect(itemX + 6, itemY + 6, CELL_SIZE - 12, CELL_SIZE - 12)
-        ctx.fillStyle = "#FFFFFF"
-        ctx.font = "14px Arial"
-        ctx.textAlign = "center"
+        const itemX = item.x * CELL_SIZE;
+        const itemY = item.y * CELL_SIZE;
+        const pulse = Math.sin(Date.now() * 0.005) * 0.1 + 0.9;
+        ctx.globalAlpha = pulse;
+        ctx.fillStyle = "#F59E0B";
+        ctx.fillRect(itemX + 6, itemY + 6, CELL_SIZE - 12, CELL_SIZE - 12);
+        ctx.fillStyle = "#FFFFFF";
+        ctx.font = "14px Arial";
+        ctx.textAlign = "center";
 
-        let emoji = "🧯"
-        if (item.type === "firstaid") emoji = "💊"
-        if (item.type === "flashlight") emoji = "🔦"
-        if (item.type === "phone") emoji = "📱"
+        let emoji = "🧯";
+        if (item.type === "firstaid") emoji = "💊";
+        if (item.type === "flashlight") emoji = "🔦";
+        if (item.type === "phone") emoji = "📱";
 
-        ctx.fillText(emoji, itemX + CELL_SIZE / 2, itemY + CELL_SIZE / 2 + 4)
-        ctx.globalAlpha = 1.0
+        ctx.fillText(emoji, itemX + CELL_SIZE / 2, itemY + CELL_SIZE / 2 + 4);
+        ctx.globalAlpha = 1.0;
       }
-    })
+    });
 
-    const playerX = gameState.playerPos.x * CELL_SIZE
-    const playerY = gameState.playerPos.y * CELL_SIZE
+    const playerX = gameState.playerPos.x * CELL_SIZE;
+    const playerY = gameState.playerPos.y * CELL_SIZE;
 
     if (gameState.powerUpActive) {
-      ctx.shadowColor = "#3B82F6"
-      ctx.shadowBlur = 10
+      ctx.shadowColor = "#3B82F6";
+      ctx.shadowBlur = 10;
     }
 
-    ctx.fillStyle = gameState.powerUpActive ? "#60A5FA" : "#3B82F6"
-    ctx.fillRect(playerX + 4, playerY + 4, CELL_SIZE - 8, CELL_SIZE - 8)
-    ctx.fillStyle = "#FFFFFF"
-    ctx.font = "18px Arial"
-    ctx.textAlign = "center"
-    ctx.fillText("🚶‍♂️", playerX + CELL_SIZE / 2, playerY + CELL_SIZE / 2 + 6)
+    ctx.fillStyle = gameState.powerUpActive ? "#60A5FA" : "#3B82F6";
+    ctx.fillRect(playerX + 4, playerY + 4, CELL_SIZE - 8, CELL_SIZE - 8);
+    ctx.fillStyle = "#FFFFFF";
+    ctx.font = "18px Arial";
+    ctx.textAlign = "center";
+    ctx.fillText("🚶‍♂️", playerX + CELL_SIZE / 2, playerY + CELL_SIZE / 2 + 6);
 
-    ctx.shadowBlur = 0
+    ctx.shadowBlur = 0;
 
     if (gameState.gameStatus === "paused") {
-      ctx.fillStyle = "rgba(0, 0, 0, 0.7)"
-      ctx.fillRect(0, 0, GRID_SIZE * CELL_SIZE, GRID_SIZE * CELL_SIZE)
-      ctx.fillStyle = "#FFFFFF"
-      ctx.font = "24px Arial"
-      ctx.textAlign = "center"
-      ctx.fillText("PAUSED", (GRID_SIZE * CELL_SIZE) / 2, (GRID_SIZE * CELL_SIZE) / 2)
-      ctx.font = "14px Arial"
-      ctx.fillText("Press SPACE to resume", (GRID_SIZE * CELL_SIZE) / 2, (GRID_SIZE * CELL_SIZE) / 2 + 30)
+      ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
+      ctx.fillRect(0, 0, GRID_SIZE * CELL_SIZE, GRID_SIZE * CELL_SIZE);
+      ctx.fillStyle = "#FFFFFF";
+      ctx.font = "24px Arial";
+      ctx.textAlign = "center";
+      ctx.fillText("PAUSED", (GRID_SIZE * CELL_SIZE) / 2, (GRID_SIZE * CELL_SIZE) / 2);
+      ctx.font = "14px Arial";
+      ctx.fillText("Press SPACE to resume", (GRID_SIZE * CELL_SIZE) / 2, (GRID_SIZE * CELL_SIZE) / 2 + 30);
     }
 
-    ctx.restore()
-  }, [gameState])
+    ctx.restore();
+  }, [gameState]);
 
+  // initialize game on mount
   useEffect(() => {
-    initializeGame()
-    ;(window as any).GameAPI = {
+    initializeGame();
+
+    // expose GameAPI
+    (window as any).GameAPI = {
       endGame: (reason: string) => {
-        setGameState((prev) => (prev ? { ...prev, gameStatus: reason === "won" ? "won" : "lost" } : prev))
+        setGameState((prev) => (prev ? { ...prev, gameStatus: reason === "won" ? "won" : "lost" } : prev));
         if (reason === "won") {
-          setShowFinalScore(true)
+          setShowFinalScore(true);
         } else {
-          setShowGameOver(true)
+          setShowGameOver(true);
         }
       },
       saveScore: ({ name }: { name: string }) => {
         if (finalScoreData) {
-          console.log("[v0] Saving score for:", name, finalScoreData)
+          console.log("[v0] Saving score for:", name, finalScoreData);
         }
       },
       loadLeaderboard: () => {
         try {
-          const stored = localStorage.getItem("disaster-maze-leaderboard")
-          return stored ? JSON.parse(stored) : []
+          const stored = localStorage.getItem("disaster-maze-leaderboard");
+          return stored ? JSON.parse(stored) : [];
         } catch {
-          return []
+          return [];
         }
       },
-    }
+    };
 
     return () => {
-      if (timerRef.current) clearInterval(timerRef.current)
-    }
-  }, [initializeGame, finalScoreData])
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // run once
 
   const formatTime = (seconds: number) => {
-    const mins = Math.floor(seconds / 60)
-    const secs = seconds % 60
-    return `${mins}:${secs.toString().padStart(2, "0")}`
-  }
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, "0")}`;
+  };
 
   if (!gameState) {
     return (
@@ -652,7 +641,7 @@ export default function GamePage() {
           <p>Generating maze...</p>
         </div>
       </div>
-    )
+    );
   }
 
   return (
@@ -818,7 +807,7 @@ export default function GamePage() {
                         <div className="text-center text-white">
                           <Pause className="h-8 w-8 mx-auto mb-2" />
                           <p className="font-semibold">Game Paused</p>
-                          <p className="text-sm">Press SPACE or tap Resume</p>
+                          <p className="text-sm">Press SPACE to resume</p>
                         </div>
                       </div>
                     )}
@@ -854,6 +843,5 @@ export default function GamePage() {
         />
       )}
     </div>
-  )
+  );
 }
-
